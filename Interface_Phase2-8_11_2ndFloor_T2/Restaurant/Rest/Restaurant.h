@@ -20,8 +20,8 @@ class Restaurant
 private:
 	GUI *pGUI;
 	Queue<Event*> EventsQueue;	//Queue of all events that will be loaded from file
-	void FileLoadingFunction();                      //SF
-	void OutputFileFunction();                       //SF
+	void FileLoadingFunction(); //SF
+	void OutputFileFunction();  //SF
 	LinkedList<Order*> normalOrders;
 	DescPriorityQueue<Order*> VIPOrders;
 	Queue<Order*> veganOrders;
@@ -35,8 +35,7 @@ private:
 	AscPriorityQueue<Cook*> restCookList;
 	Queue<Order*> UrgentList;
 	AscPriorityQueue<Cook*> InjuredCooks;
-	Queue<Cook*> CooksAssigned;                        //SF
-	 
+
 	//
 	// TODO: Add More Data Members As Needed
 	//
@@ -52,6 +51,7 @@ public:
 	
 	void Add_TO_FinishedList();
 	void cooksAfterFinishing();
+	void cooksAfterBreak();
 	void FillDrawingList();
 
 	void ArrivalOfOrder(int oID, ORD_TYPE oType, int oAT, int oSize, double oMoney); //AM
@@ -67,16 +67,15 @@ public:
 
 	Queue<Order*>* sortedfinished();
 
-	void printOnStatus(PROG_MODE MODE);
+	void printOnStatus();
 	int calculateServiceTime(Order*, Cook*); //AM
-	void PrintAssigned(Queue <Cook*> CooksAssigned); //SF
 
 	// TODO: Add More Member Functions As Needed
 	//
 	LinkedList<Order*>* getnormalOrders();
 	Queue<Order*>* getveganOrders();
 	DescPriorityQueue<Order*>* getVIPOrders();
-	void SimulatorFunction(PROG_MODE MODE);
+	void SimulatorFunction();
 	void Add_TO_UrgentList();
 	void Assign_Urgent_Orders(Order*, Cook*, int, int, int);
 

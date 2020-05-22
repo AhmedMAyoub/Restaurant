@@ -10,9 +10,6 @@ using namespace std;
 #include <fstream>
 #include <iostream>
 #include <iomanip>
-////////////////////
-#include <thread>         // std::this_thread::sleep_for
-#include <chrono>         // std::chrono::seconds
 
 
 void Restaurant::FileLoadingFunction()                                    //SF
@@ -173,24 +170,20 @@ void Restaurant::OutputFileFunction()                                           
 	int count;  //Total Number OF Orders
 	Order** OPP = finishedList.toArray(count); 
 	Order* OP = nullptr;
-	OP->PrintArr(count, OPP);
 	cout << endl;
-
-	//Order ** finishedlistsorted=OP->SortSrvtime(count, OPP);    // this line Causes  a heap realted problem
-	//OP->PrintArr(count, finishedlistsorted);
-	
+	Order ** finishedlistsorted=OP->SortSrvtime(count, OPP);
+	OP->PrintArr(count, finishedlistsorted);
 	int TotatWaitingTime = 0;
 	int	TotalInserviceTime = 0;
-	
+
 	for (int i = 0; i < count; i++)
 	{
-		Order* O = OPP[i];
-		//Order*  O =finishedlistsorted[i];     
+		Order*  O =finishedlistsorted[i];
 		fout << O->getFinishedtime() << "    ";
 		fout << O->GetID() << "    ";
 		fout << O->getArrivaltime() << "    ";
-		fout << O->getWaitingTime() << "    ";    
-		fout << O->getSevicetime() << "     ";   
+		fout << O->getWaitingTime() << "    ";    // Waiting Time
+		fout << O->getSevicetime() << "     "; // InService Time
 		fout << endl;
 		TotatWaitingTime += O->getWaitingTime();
 		TotalInserviceTime += O->getSevicetime();
@@ -204,16 +197,16 @@ void Restaurant::OutputFileFunction()                                           
 	VIPCooks.toArray(vip);   // Number OF VIP    Cooks
 	Cook* CP = nullptr;
 	int total = n + vg + vip;//Total Number OF Cooks
-	fout << "Cooks:" << total << " " << "[" << "Norm:" << n << "," << "Veg:" << vg << "," << "VIP:" << vip<< "," << "injured:"<<CP->GetNumberOfInjured()<<"]";
+	fout << "Cooks:" << total << " " << "[" << "Norm:" << n << "," << "Veg:" << vg << "," << "VIP:" << vip << "," << "injured:"<<""<<"]";
 	fout << endl;
 	float AvgWaitingTime = (float)TotatWaitingTime /(float) count;
 	float AvgInserviceTime = (float)TotalInserviceTime /(float) count;
 	fout << "Avg Wait=" <<fixed<< setprecision(2)<<AvgWaitingTime << ",  " << "Avg Serv=" <<fixed<< setprecision(2)<< AvgInserviceTime;
 	fout << endl;
-	int TotalNormOrders = OP->getFnormal() + OP->getAutoPromoted();
-	float calcAutoprom = (((float)OP->getAutoPromoted() /(float) TotalNormOrders )* 100);
-	fout << "Urgent orders:" << OP->GetNumberOfUrgent()<<" ,"<< "Auto-Promoted:" << (int)calcAutoprom<< "%";
-	
+	int UrgOrders;
+	UrgentList.toArray(UrgOrders);
+	fout << "Urgent orders:" << UrgOrders<<" ,"<< "Auto-Promoted:" << OP->getAutoPromoted()/count << "%";
+
 }
 
 
@@ -231,15 +224,14 @@ void Restaurant::RunSimulation()
 	switch (mode)	//Add a function for each mode in next phases
 	{
 	case MODE_INTR:
-		SimulatorFunction(MODE_INTR);
+		SimulatorFunction();
 		break;
 	case MODE_STEP:
-		SimulatorFunction(MODE_STEP);
 		break;
 	case MODE_SLNT:
-		SimulatorFunction(MODE_SLNT);
 		break;
-	
+	case MODE_DEMO:
+		break;
 	};
 
 }
@@ -376,7 +368,7 @@ void Restaurant::Add_TO_FinishedList() {					//MM
 }
 
 
-void Restaurant::SimulatorFunction(PROG_MODE MODE) //AM
+void Restaurant::SimulatorFunction() //AM
 {
 	FileLoadingFunction();
 	while (!EventsQueue.isEmpty() || !normalOrders.isEmpty() || !veganOrders.isEmpty() || !VIPOrders.isEmpty() || !inServiceList.isEmpty())
@@ -385,26 +377,15 @@ void Restaurant::SimulatorFunction(PROG_MODE MODE) //AM
 		
 		ExecuteEvents(timeStep);
 		Order* pO=nullptr;
-		AssignOrders();									    //Assigning Orders to cooks if available
+		AssignOrders();									//Assigning Orders to cooks if available
 		
-		Add_TO_FinishedList();							    // Move finished orders at this timestep to finishedlist
-		cooksAfterFinishing();					            // Move cooks to their list or break or (not implemented rest)
+		Add_TO_FinishedList();							// Move finished orders at this timestep to finishedlist
+		cooksAfterFinishing();					    // Move cooks to their list or break or (not implemented rest)
 		CheckAutoPromotion();                           //SF 
-		if (MODE != MODE_SLNT)                          //SF
-		{
-			FillDrawingList();
-			pGUI->UpdateInterface();
-			printOnStatus( MODE);								//Print on status bar
-		}
-		if (MODE == MODE_INTR)                          //SF
-		{
-			pGUI->waitForClick();
-		}
-		else if (MODE == MODE_STEP)
-		{
-			Sleep(1000);                 //Edited
-		}
-		CooksAssigned = Queue<Cook*>();               //SF
+		FillDrawingList();								
+		pGUI->UpdateInterface();
+		printOnStatus();								//Print on status bar
+		pGUI->waitForClick();
 		timeStep++;
 	}
 	
@@ -489,7 +470,6 @@ void Restaurant::CheckAutoPromotion()         //SF
 		{
 			PromoteOrder(Arr[i]->GetID(), 0);
 			Arr[i]->setAutoPromoted(Arr[i]->getAutoPromoted() + 1);
-			
 		}
 	}
 
@@ -519,7 +499,6 @@ void Restaurant::Assign_Urgent_Orders(Order* pO, Cook* pC, int FT, int ST, int W
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);
 		}
 
 		else if (normalCooks.peekFront(pC)) {
@@ -541,7 +520,6 @@ void Restaurant::Assign_Urgent_Orders(Order* pO, Cook* pC, int FT, int ST, int W
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);
 		}
 
 		else if (veganCooks.peekFront(pC)) {
@@ -563,7 +541,6 @@ void Restaurant::Assign_Urgent_Orders(Order* pO, Cook* pC, int FT, int ST, int W
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);
 		}
 
 		else if (breakCookList.peekFront(pC)) {
@@ -583,7 +560,7 @@ void Restaurant::Assign_Urgent_Orders(Order* pO, Cook* pC, int FT, int ST, int W
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);
+
 		}
 
 		else if (restCookList.peekFront(pC)) {
@@ -604,11 +581,10 @@ void Restaurant::Assign_Urgent_Orders(Order* pO, Cook* pC, int FT, int ST, int W
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);
+
 		}
 	}
 }
-
 
 void Restaurant::AssignOrders() //AM
 {
@@ -641,7 +617,6 @@ void Restaurant::AssignOrders() //AM
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);     //SF
 		}
 		else if (normalCooks.peekFront(pC))
 		{
@@ -662,9 +637,6 @@ void Restaurant::AssignOrders() //AM
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);     //SF
-
-
 		}
 		else if (veganCooks.peekFront(pC))
 		{
@@ -685,9 +657,6 @@ void Restaurant::AssignOrders() //AM
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);     //SF
-
-
 		}
 	}
 	while (veganOrders.peekFront(pO) && veganCooks.peekFront(pC))
@@ -709,9 +678,6 @@ void Restaurant::AssignOrders() //AM
 		pC->setAssignedOrder(pO);
 		pC->setFinishTime(timeStep + ST);
 		busyCookList.enqueue(pC, pC->getFinishTime());
-		CooksAssigned.enqueue(pC);     //SF
-
-
 	}
 	while (!normalOrders.isEmpty() && (normalCooks.peekFront(pC) || VIPCooks.peekFront(pC)))
 	{
@@ -734,10 +700,6 @@ void Restaurant::AssignOrders() //AM
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);     //SF
-
-			
-
 		}
 		else
 		{
@@ -758,9 +720,6 @@ void Restaurant::AssignOrders() //AM
 			pC->setAssignedOrder(pO);
 			pC->setFinishTime(timeStep + ST);
 			busyCookList.enqueue(pC, pC->getFinishTime());
-			CooksAssigned.enqueue(pC);     //SF
-
-
 		}
 	}
 }
@@ -772,10 +731,8 @@ float Restaurant::Generate_Decimal_Number()
 	return RandomNumber;
 }
 
-void Restaurant::printOnStatus(PROG_MODE MODE) //AM
+void Restaurant::printOnStatus() //AM
 {
-	
-
 	Order* pO;
 	Cook cook;
 	pGUI->PrintMessage("TimeStep: " + to_string(timeStep));
@@ -784,63 +741,8 @@ void Restaurant::printOnStatus(PROG_MODE MODE) //AM
 	string Veg = "     Vegan: ";
 	pGUI->PrintMessage("Number of waiting Orders:  " + to_string(pO->getWOrders()) + N + to_string(pO->getWnormal()) + VIP + to_string(pO->getWvip()) + Veg + to_string(pO->getWvegan()));						//to_string(pO->getWnormal())
 	pGUI->PrintMessage("Number of availabe cooks:  " + to_string(cook.getNumberofAvaialableCooks()) + N + to_string(cook.getNORMALAvailablecooks()) + VIP + to_string(cook.getVIPAvailablecooks()) + Veg + to_string(cook.getVEGANAvailablecooks()));
-	PrintAssigned(CooksAssigned);
-	int TotalFinishedOrders = pO->getFnormal() + pO->getFvegan() + pO->getFvip();
-	pGUI->PrintMessage("Number of Finished Orders:  " + to_string(TotalFinishedOrders )+ N + to_string(pO->getFnormal()) + VIP + to_string(pO->getFvip()) + Veg + to_string(pO->getFvegan()));
-	if (MODE==MODE_INTR)
-	{
-		pGUI->PrintMessage("Please Click Mouse to go to next timestep");
-	}
-}
-void Restaurant::PrintAssigned(Queue <Cook*> CooksAssigned)
-{
 
-	int count;
-	Cook** bl = CooksAssigned.toArray(count);
-	for(int i=0;i<count;i++)
-	{
-		Cook* C = bl[i];
-		Order* O = bl[i]->getAssignedOrder();
-
-		if (C && O)
-		{
-			int CookID = C->GetID();
-			ORD_TYPE CookType = C->GetType();
-			string CookTypeChar;
-			if (CookType == TYPE_NRM)
-			{
-				CookTypeChar = 'N';
-			}
-			else if (CookType == TYPE_VGAN)
-			{
-				CookTypeChar = 'G';
-			}
-			else
-			{
-				CookTypeChar = 'V';
-			}
-
-
-			int OrderID = O->GetID();
-			ORD_TYPE OrderType = O->GetType();
-			string OrderTypeChar;
-			if (OrderType == TYPE_NRM)
-			{
-				OrderTypeChar = 'N';
-			}
-			else if (OrderType == TYPE_VGAN)
-			{
-				OrderTypeChar = 'G';
-			}
-			else
-			{
-				OrderTypeChar = 'V';
-			}
-
-			pGUI->PrintMessage( CookTypeChar + to_string(CookID)+ "(" + OrderTypeChar + to_string(OrderID) + ")" + "   ");
-		}
-
-	}
+	pGUI->PrintMessage("Please Click Mouse to go to next timestep");
 }
 /*
 if (normalOrders.removeOrder(pO))
@@ -890,7 +792,6 @@ void Restaurant::Add_TO_UrgentList() {
 			Order* ptr;
 			UrgentOrders.dequeue(ptr);
 			UrgentList.enqueue(ptr);
-			ptr->SetNumberofUrgent(ptr->GetNumberOfUrgent() + 1); //SF
 
 		}
 
@@ -898,12 +799,59 @@ void Restaurant::Add_TO_UrgentList() {
 
 }
 
-
-
 int Restaurant::calculateServiceTime(Order* pO, Cook* pC)
 {
 	int serviceTime = (pO->getOSize()) / pC->GetSpeed();
 	return serviceTime;
+}
+
+void Restaurant::cooksAfterBreak() {
+	if (breakCookList.isEmpty())
+		return;
+	Cook* pC;
+	breakCookList.peekFront(pC);
+	while (pC->GetBreakFinishTime() == timeStep && !breakCookList.isEmpty()) { //checking if break time is over
+		breakCookList.dequeue(pC);
+		if (pC->GetType() == TYPE_VIP) {
+			VIPCooks.enqueue(pC);
+			pC->setNumberofAvailableCooks(pC->getNumberofAvaialableCooks() + 1);
+			pC->setVIPAvailablecooks(pC->getVIPAvailablecooks() + 1);
+		}
+		else if (pC->GetType() == TYPE_NRM) {
+			normalCooks.enqueue(pC);
+			pC->setNumberofAvailableCooks(pC->getNumberofAvaialableCooks() + 1);
+			pC->setNORMALAvailablecooks(pC->getNORMALAvailablecooks() + 1);
+		}
+		else if (pC->GetType() == TYPE_VGAN) {
+			veganCooks.enqueue(pC);
+			pC->setNumberofAvailableCooks(pC->getNumberofAvaialableCooks() + 1);
+			pC->setVEGANAvailablecooks(pC->getVEGANAvailablecooks() + 1);
+		}
+		breakCookList.peekFront(pC);
+	}
+	if (restCookList.isEmpty())
+		return;
+	restCookList.peekFront(pC);
+	while (pC->GetBreakFinishTime() == timeStep && !restCookList.isEmpty()) {
+		pC->SetXSpeed(2);
+		restCookList.dequeue(pC);
+		if (pC->GetType() == TYPE_VIP) {
+			VIPCooks.enqueue(pC);
+			pC->setNumberofAvailableCooks(pC->getNumberofAvaialableCooks() + 1);
+			pC->setVIPAvailablecooks(pC->getVIPAvailablecooks() + 1);
+		}
+		else if (pC->GetType() == TYPE_NRM) {
+			normalCooks.enqueue(pC);
+			pC->setNumberofAvailableCooks(pC->getNumberofAvaialableCooks() + 1);
+			pC->setNORMALAvailablecooks(pC->getNORMALAvailablecooks() + 1);
+		}
+		else if (pC->GetType() == TYPE_VGAN) {
+			veganCooks.enqueue(pC);
+			pC->setNumberofAvailableCooks(pC->getNumberofAvaialableCooks() + 1);
+			pC->setVEGANAvailablecooks(pC->getVEGANAvailablecooks() + 1);
+		}
+		restCookList.peekFront(pC);
+	}
 }
 
 void Restaurant::cooksAfterFinishing()			//AM, still part manar on injured not implemented
@@ -917,11 +865,11 @@ void Restaurant::cooksAfterFinishing()			//AM, still part manar on injured not i
 	while (pC->getFinishTime() == timeStep && !busyCookList.isEmpty())
 	{
 		busyCookList.dequeue(pC);
-		CooksAssigned.dequeue(pC);    //SF
 		pC->setordersdone(pC->getordersdone() + 1);
 		if (pC->getordersdone() == pC->getbreakorders())
 		{
 			pC->setordersdone(0);
+			pC->SetBreakFinishTime(pC->GetBreak(), timeStep);
 			breakCookList.enqueue(pC, pC->GetBreak());
 		}
 		else if (pC->GetType() == TYPE_VIP)
@@ -952,6 +900,7 @@ void Restaurant::cooksAfterFinishing()			//AM, still part manar on injured not i
 	while (pC->getFinishTime() == timeStep && !InjuredCooks.isEmpty())
 	{
 		InjuredCooks.dequeue(pC);
+		pC->SetBreakFinishTime(pC->GetRstPrd(), timeStep);
 		restCookList.enqueue(pC, pC->GetRstPrd());
 		InjuredCooks.peekFront(pC);
 	}
@@ -963,22 +912,19 @@ void Restaurant::HealthEmergencyProblems() {
 	float R = Generate_Decimal_Number();
 	if (R <= C->GetInjProp()) {
 		int OGfinish = C->getAssignedOrder()->getArrivaltime() + C->getAssignedOrder()->getWaitingTime() + calculateServiceTime(C->getAssignedOrder(), C);
-		int remaining = OGfinish - timeStep;
-		int newsize = remaining * C->GetSpeed();
+		int remaining = OGfinish - timeStep; //remaining service time for this order
+		int newsize = remaining * C->GetSpeed(); //calculate remaining size of this order
 		int servprev = C->getAssignedOrder()->getOSize() - newsize;
-		servprev = servprev / C->GetSpeed();
+		servprev = servprev / C->GetSpeed(); //done service time with original speed of cook
 		C->getAssignedOrder()->setOSize(newsize);
-		C->SetHalfSpeed(C->GetSpeed());
-		int newserv = calculateServiceTime(C->getAssignedOrder(), C);
+		C->SetXSpeed(1/2);
+		int newserv = calculateServiceTime(C->getAssignedOrder(), C); //new service time for remaining dishes with half speed
 		C->getAssignedOrder()->setServicetime(newserv + servprev);
-		int newfinish = C->getAssignedOrder()->getArrivaltime() + C->getAssignedOrder()->getWaitingTime() + C->getAssignedOrder()->getSevicetime();
-		C->getAssignedOrder()->setFinishedtime(newfinish);
-		inServiceList.ReArrange(C->getAssignedOrder(), newfinish);
-		int finish_cook = calculateServiceTime(C->getAssignedOrder(), C) + timeStep;
+		int newfinish = C->getAssignedOrder()->getArrivaltime() + C->getAssignedOrder()->getWaitingTime() + C->getAssignedOrder()->getSevicetime(); 
+		C->getAssignedOrder()->setFinishedtime(newfinish); 
+		inServiceList.ReArrange(C->getAssignedOrder(), newfinish); 
+		int finish_cook = calculateServiceTime(C->getAssignedOrder(), C) + timeStep; 
 		busyCookList.dequeue(C);
-		CooksAssigned.dequeue(C);    //SF
-
 		InjuredCooks.enqueue(C, finish_cook);
-		C->SetNumberOfInjured(C->GetNumberOfInjured() + 1);//SF
 	}
 }
